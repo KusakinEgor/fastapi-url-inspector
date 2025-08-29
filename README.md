@@ -1,1 +1,1 @@
-# Пока думаю что сделать
+# Fastapi url inspector
