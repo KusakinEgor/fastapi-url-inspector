@@ -6,10 +6,11 @@ import time
 from urllib.parse import urlparse
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple, Union
+from pydantic import HttpUrl
 
 class URLInspector:
-    def __init__(self, timeout: float = 10.0, max_connection: int = 100):
+    def __init__(self, timeout: float = 10.0, max_connection: int = 50):
         self.timeout = httpx.Timeout(timeout)
 
         limits = httpx.Limits(
@@ -20,90 +21,88 @@ class URLInspector:
         self.client = httpx.AsyncClient(
             timeout=self.timeout,
             limits=limits,
-            follow_redirects=True
+            follow_redirects=True,
+            verify=True
         )
 
     async def close(self):
         await self.client.aclose()
     
-    async def _ensure_scheme(self, url: str) -> str:
+    async def _ensure_scheme(self, url: Union[str, HttpUrl]) -> str:
+        url = str(url)
         parsed = urlparse(url)
 
         if not parsed.scheme:
-            return "http://" + url
+            return "https://" + parsed.netloc + parsed.path
+        elif parsed.scheme != "https":
+            return "https://" + parsed.netloc + parsed.path
         
         return url
     
-    async def check_status(self, url: str, timeout: Optional[float] = None) -> Optional[int]:
+    async def check_status(self, url: Union[str, HttpUrl], timeout: Optional[float] = None) -> Optional[Tuple[int, Dict[str, str]]]:
         url = await self._ensure_scheme(url)
 
         try:
             response = await self.client.head(url)
 
             if response.status_code >= 400:
-                response = await self.client.get(url, stream=True)
+                async with self.client.stream("GET", url) as response:
+                    headers = dict(response.headers)
+                    status_code = response.status_code
+                    return status_code, headers
             
-            return dict(response.headers)
+            return response.status_code, dict(response.headers)
         except httpx.RequestError:
             return None
     
-    async def measure_response_time(self, url: str) -> Optional[float]:
+    async def measure_response_time(self, url: Union[str, HttpUrl]) -> Optional[float]:
         url = await self._ensure_scheme(url)
         start = time.perf_counter()
 
         try:
-            response = await self.client.get(url)
+            await self.client.get(url)
             return time.perf_counter() - start
         except httpx.RequestError:
             return None
     
-    async def check_ssl(self, url: str, port: int = 433) -> Optional[Dict[str, Any]]:
-        parsed = urlparse(url)
-        hostname = parsed.hostname or parsed.path
-
-        if not hostname:
-            return None
+    async def check_ssl(self, url: Union[str, HttpUrl], port: int = 443) -> Optional[Dict[str, Any]]:
+        url = await self._ensure_scheme(url)
         
-        def _get_cert():
-            ctx = ssl.create_default_context()
+        try:
+            response = await self.client.get(url)
+            ssl_object = response.extensions.get("ssl_object")
 
-            with socket.create_connection((hostname, port), timeout=5) as socket:
-                with ctx.wrap_socket(socket, server_hostname=hostname) as wrap_socket:
-                    cert = wrap_socket.getpeercert()
+            if not ssl_object:
+                return None
+            
+            cert = ssl_object.getpeercert()
             not_after = cert.get("notAfter")
+            valid = False
             expires = None
 
             if not_after:
                 try:
                     expires = parsedate_to_datetime(not_after)
+                    if expires and expires.tzinfo is None:
+                        expires = expires.replace(tzinfo=timezone.utc)
+                    valid = datetime.now(timezone.utc) < expires
                 except Exception:
-                    expires = datetime.strptime(not_after, "%b %d %H:%M:%S %Y %Z")
+                    expires = None
             
             def pair_to_dict(pair):
                 out = {}
-
                 for item in pair or ():
                     for key, value in item:
                         out[key] = value
                 return out
-        
-            issuer = pair_to_dict(cert.get("issuer"))
-            subject = pair_to_dict(cert.get("subject"))
-            valid = None
-
-            if expires:
-                if expires.tzinfo is None:
-                    expires = expires.replace(tzinfo=timezone.utc)
-                valid = datetime.now(timezone.utc) < expires
             
             return {
                 "valid": valid,
-                "expires": expires.isoformat() if expires is not None else None,
-                "issuer": issuer,
-                "subject": subject,
+                "expires": expires.isoformat() if expires else None,
+                "issuer": pair_to_dict(cert.get("issuer")),
+                "subject": pair_to_dict(cert.get("subject")),
             }
         
-        try:
-            return await asyncio.to_thread(_get_cert)
-        except Exception:
+        except Exception as e:
+            print(f"SSL check failed for {url}: {e}")
             return None
