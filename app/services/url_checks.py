@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Optional, Dict, Any, Tuple, Union
 from pydantic import HttpUrl
+from app.schemas.analyze import UrlRequest
 
 class URLInspector:
     def __init__(self, timeout: float = 10.0, max_connection: int = 50):
@@ -18,13 +19,10 @@ class URLInspector:
             max_connections=max_connection
         )
 
-        self.transport = httpx.AsyncHTTPTransport(verify=True)
-
         self.client = httpx.AsyncClient(
             timeout=self.timeout,
             limits=limits,
-            follow_redirects=True,
-            transport=self.transport
+            follow_redirects=True
         )
 
     async def close(self):
@@ -110,3 +108,13 @@ class URLInspector:
 
     async def check_ssl(self, url: str, port: int = 443):
         return await asyncio.to_thread(self._check_ssl_sync, url, port)
+    
+    async def get_redirects(self, url: Union[str, HttpUrl], follow_redirects: bool = True) -> list[str]:
+        url = str(url)
+        response = await self.client.get(url, follow_redirects=follow_redirects)
+        history = response.history
+
+        redirects = [resp.url for resp in history]
+        redirects.append(str(response.url))
+
+        return redirects

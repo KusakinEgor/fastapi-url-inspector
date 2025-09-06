@@ -1,14 +1,12 @@
 from fastapi import FastAPI
 import uvicorn
 
-from app.routing.links import router as link_router
 from app.routing.analyze import router as analyze_router
 from app.services.url_checks import URLInspector
 import app.depends as depends
 
 app = FastAPI()
 
-app.include_router(link_router)
 app.include_router(analyze_router)
 
 @app.on_event("startup")
