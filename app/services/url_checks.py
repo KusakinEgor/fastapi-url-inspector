@@ -18,11 +18,13 @@ class URLInspector:
             max_connections=max_connection
         )
 
+        self.transport = httpx.AsyncHTTPTransport(verify=True)
+
         self.client = httpx.AsyncClient(
             timeout=self.timeout,
             limits=limits,
             follow_redirects=True,
-            verify=True
+            transport=self.transport
         )
 
     async def close(self):
@@ -65,44 +67,46 @@ class URLInspector:
         except httpx.RequestError:
             return None
     
-    async def check_ssl(self, url: Union[str, HttpUrl], port: int = 443) -> Optional[Dict[str, Any]]:
-        url = await self._ensure_scheme(url)
-        
-        try:
-            response = await self.client.get(url)
-            ssl_object = response.extensions.get("ssl_object")
+    def _check_ssl_sync(self, url: Union[str, HttpUrl], port: int = 443) -> Optional[Dict[str, Any]]:
+        url = str(url)
+        parsed = urlparse(url)
+        host = parsed.hostname
 
-            if not ssl_object:
-                return None
-            
-            cert = ssl_object.getpeercert()
-            not_after = cert.get("notAfter")
-            valid = False
-            expires = None
-
-            if not_after:
-                try:
-                    expires = parsedate_to_datetime(not_after)
-                    if expires and expires.tzinfo is None:
-                        expires = expires.replace(tzinfo=timezone.utc)
-                    valid = datetime.now(timezone.utc) < expires
-                except Exception:
-                    expires = None
-            
-            def pair_to_dict(pair):
-                out = {}
-                for item in pair or ():
-                    for key, value in item:
-                        out[key] = value
-                return out
-            
-            return {
-                "valid": valid,
-                "expires": expires.isoformat() if expires else None,
-                "issuer": pair_to_dict(cert.get("issuer")),
-                "subject": pair_to_dict(cert.get("subject")),
-            }
-        
-        except Exception as e:
-            print(f"SSL check failed for {url}: {e}")
+        if not host:
             return None
+        
+        ctx = ssl.create_default_context()
+
+        try:
+            with socket.create_connection((host, port), timeout=5) as sock:
+                with ctx.wrap_socket(sock, server_hostname=host) as ssock:
+                    cert = ssock.getpeercert()
+                    not_after = cert.get("notAfter")
+                    expires = None
+                    valid = False
+
+                    if not_after:
+                        expires = parsedate_to_datetime(not_after)
+                        if expires and expires.tzinfo is None:
+                            expires = expires.replace(tzinfo=timezone.utc)
+                        valid = datetime.now(timezone.utc) < expires
+                    
+                    def pair_to_dict(pair):
+                        out = {}
+                        for item in pair or ():
+                            for key, value in item:
+                                out[key] = value
+                        return out
+
+                    return {
+                        "valid": valid,
+                        "expires": expires.isoformat() if expires else None,
+                        "issuer": pair_to_dict(cert.get("issuer")),
+                        "subject": pair_to_dict(cert.get("subject")),
+                    }
+        except Exception as e:
+            print(f"SSL check failed for {host}:{port} → {e}")
+            return None
+
+    async def check_ssl(self, url: str, port: int = 443):
+        return await asyncio.to_thread(self._check_ssl_sync, url, port)
