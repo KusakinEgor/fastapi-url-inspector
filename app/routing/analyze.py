@@ -3,8 +3,11 @@ from app.schemas.analyze import UrlRequest, UrlResponse
 from app.depends import get_inspector
 from app.depends import get_links_collection
 from app.services.url_checks import URLInspector
+from app.repositories.redis_cache import redis_client
+from app.repositories.rabbitmq_manager import send_to_queue
 import pymongo
 import asyncio
+import json
 
 router = APIRouter(tags=["🔍 Analyze"])
 
@@ -24,6 +27,12 @@ async def inspect_url(
     inspector: URLInspector = Depends(get_inspector),
     links_collection = Depends(get_links_collection),
 ):
+    cache_key = f"url:{url_request.link}"
+    chached = await redis_client.get(cache_key)
+
+    if chached:
+        return UrlResponse(**json.loads(chached)) 
+
     status_headers, response_time, ssl_information, redirects = await asyncio.gather(
         inspector.check_status(url_request.link),
         inspector.measure_response_time(url_request.link),
@@ -50,15 +59,13 @@ async def inspect_url(
     }
 
     try:
-        cursor = await links_collection.insert_one(mongo_request)
+        await links_collection.insert_one(mongo_request)
     except pymongo.errors.DuplicateKeyError as e:
         print(f"Error: {e}")
     except pymongo.errors.PyMongoError as e:
         print(f"Error: {e}")
-
-    print(cursor.inserted_id)
-
-    return UrlResponse(
+    
+    response = UrlResponse(
       status=status_code,
       headers=headers,
       redirects=redirects,
@@ -67,3 +74,7 @@ async def inspect_url(
       meta={"ssl_information": ssl_information},
       content_type=content_type,
     )
+
+    await redis_client.set(cache_key, response.json(), ex=300)
+
+    return response
