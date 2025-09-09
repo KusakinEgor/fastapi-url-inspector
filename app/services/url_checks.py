@@ -8,7 +8,6 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Optional, Dict, Any, Tuple, Union
 from pydantic import HttpUrl
-from app.schemas.analyze import UrlRequest
 
 class URLInspector:
     def __init__(self, timeout: float = 10.0, max_connection: int = 50):

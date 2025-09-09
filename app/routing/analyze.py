@@ -4,7 +4,6 @@ from app.depends import get_inspector
 from app.depends import get_links_collection
 from app.services.url_checks import URLInspector
 from app.repositories.redis_cache import redis_client
-from app.repositories.rabbitmq_manager import send_to_queue
 import pymongo
 import asyncio
 import json
@@ -16,9 +15,9 @@ router = APIRouter(tags=["🔍 Analyze"])
         response_model=UrlResponse,
         summary="🔍 Perform comprehensive URL analysis",
         description="""
-        Analyzes a URL by checking availability ✅, status code ✅, response time ⏱,
-        SSL certificate 🔒, headers and meta tags 📝, suspicious query parameters ⚠️,
-        redirects 🔁, and content type 📋. Results are stored in MongoDB and can be cached in Redis for faster access.
+        Analyzes a URL by checking availability, status code, response time,
+        SSL certificate, headers and meta tags, suspicious query parameters,
+        redirects, and content type. Results are stored in MongoDB and can be cached in Redis for faster access.
         """
 )
 async def inspect_url(
