@@ -4,6 +4,7 @@ from app.depends import get_inspector
 from app.depends import get_links_collection
 from app.services.url_checks import URLInspector
 from app.repositories.redis_cache import redis_client
+from datetime import datetime
 import pymongo
 import asyncio
 import json
@@ -54,7 +55,8 @@ async def inspect_url(
           "ssl_information": ssl_information
        },
        "user_agent": request.headers.get("user-agent"),
-       "content_type": content_type
+       "content_type": content_type,
+       "inserted_at": datetime.now()
     }
 
     try:
