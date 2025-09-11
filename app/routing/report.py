@@ -1,47 +1,32 @@
 from fastapi import APIRouter, Depends
-from datetime import datetime
+from datetime import datetime, time, timezone
 from app.depends import get_links_collection
 from app.schemas.report import ReportItem, ReportRequest, ReportResponse
-from typing import List, Dict
+from app.services.report_service import build_date_filter, aggregate_records, build_report_data
 
 router = APIRouter(tags=["📊 Report"])
 
 @router.post(
-        "/report",
-        response_model=ReportResponse,
-        summary="📊 Generate aggregated report of URL checks",
-        description="Returns aggregated statistics for all URLs or filtered by URL/date range"
+    "/report",
+    response_model=ReportResponse,
+    summary="📊 Generate aggregated report of URL checks",
+    description="Returns aggregated statistics for all URLs or filtered by URL/date range"
 )
-async def get_report(
-    body: ReportRequest,
-    links_collection = Depends(get_links_collection)
-):
+async def get_report(body: ReportRequest, links_collection = Depends(get_links_collection)):
     query_filter = {}
-    urls = await links_collection.distinct("URL", filter=query_filter)
-    report_data = []
+    if body.url:
+        query_filter["URL"] = str(body.url)
 
-    for url in urls:
-        records = await links_collection.find({**query_filter, "URL": url}).to_list(length=None)
-        total_checks = len(records)
-        success_count = sum(1 for r in records if r.get("status") and 200 <= r["status"] < 400)
-        failure_count = total_checks - success_count
-        average_response_time = sum(r.get("response_time", 0) for r in records) / total_checks if total_checks else 0
-        redirects_total = sum(r.get("redirects", 0) for r in records if r.get("redirects") is not None)
-        ssl_issues = sum(1 for r in records if r.get("ssl") is False)
+    date_filter = build_date_filter(body.from_date, body.to_date)
+    if date_filter:
+        query_filter["inserted_at"] = date_filter
 
-        report_data.append(
-            ReportItem(
-                url=url,
-                total_checks=total_checks,
-                success_count=success_count,
-                failure_count=failure_count,
-                average_response_time=average_response_time,
-                redirects_total=redirects_total,
-                ssl_issues=ssl_issues
-            )
-        )
+    records = await links_collection.find(query_filter).to_list(length=None)
+
+    aggregated = aggregate_records(records)
+    report_data = build_report_data(aggregated)
 
     return ReportResponse(
-        generated_at=datetime.now(),
+        generated_at=datetime.now(timezone.utc),
         summary=report_data
     )
