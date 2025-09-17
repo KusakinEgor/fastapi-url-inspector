@@ -1,6 +1,7 @@
 import redis.asyncio as redis
+from app.config import REDIS_URL
 
-redis_client = redis.Redis(host="localhost", port=6379, decode_responses=True)
+redis_client = redis.Redis(REDIS_URL, decode_responses=True)
 
 async def set_value(key: str, value: str):
     await redis_client.set(key, value, ex=60)
