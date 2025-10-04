@@ -22,10 +22,10 @@ class UrlRequest(BaseModel):
 class UrlResponse(BaseModel):
     status: Optional[int] = None
     ssl: Optional[bool] = None
-    headers: Optional[dict] = None
+    headers: Optional[dict[str, str]] = None
     redirects: Optional[List[str]] = None
     response_time: Optional[float] = None
-    meta: Optional[dict] = None
+    meta: Optional[dict[str, dict]] = None
     suspicious: Optional[bool] = None
     content_type: Optional[str] = None
 

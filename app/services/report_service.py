@@ -2,15 +2,17 @@ from datetime import datetime, time, timezone
 from app.schemas.report import ReportItem
 
 def build_date_filter(from_date, to_date):
-    if not from_date and not to_date:
-        return None
-
     date_filter = {}
+
     if from_date:
-        date_filter["$gte"] = datetime.combine(from_date.date(), time(0, 0, 0, 0), tzinfo=timezone.utc)
+        date_filter["$gte"] = datetime.combine(
+            from_date.date(),time.min,tzinfo=timezone.utc
+        )
     if to_date:
-        date_filter["$lte"] = datetime.combine(to_date.date(), time(23, 59, 59, 999999), tzinfo=timezone.utc)
-    return date_filter
+        date_filter["$lte"] = datetime.combine(
+            to_date.date(), time.max, tzinfo=timezone.utc
+        )
+    return date_filter or None
 
 def aggregate_records(records):
     aggregated = {}

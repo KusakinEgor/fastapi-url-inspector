@@ -28,10 +28,10 @@ async def inspect_url(
     links_collection = Depends(get_links_collection),
 ):
     cache_key = f"url:{url_request.link}"
-    chached = await redis_client.get(cache_key)
+    cached_data = await redis_client.get(cache_key)
 
-    if chached:
-        return UrlResponse(**json.loads(chached)) 
+    if cached_data:
+        return UrlResponse(**json.loads(cached_data)) 
 
     status_headers, response_time, ssl_information, redirects = await asyncio.gather(
         inspector.check_status(url_request.link),

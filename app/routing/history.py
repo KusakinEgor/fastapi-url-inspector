@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends
 from app.schemas.history import UrlHistoryResponse, UrlHistory
 from app.schemas.analyze import UrlResponse
 from app.depends import get_links_collection
-from typing import List
 
 router = APIRouter(tags=["📜 History"])
 
@@ -22,22 +21,26 @@ async def get_history(
     limit = body.limit or 10
     mongo_filter = {"URL": url}
 
-    records = await links_collection.find(mongo_filter).sort("inserted_at", -1).limit(limit).to_list(length=limit)
+    records = await (
+        links_collection
+        .find(mongo_filter)
+        .sort("inserted_at", -1)
+        .limit(limit)
+        .to_list(length=limit)
+    )
 
-    response_list = []
-
-    for record in records:
-        response_list.append(
-            UrlResponse(
-                status=record.get("status"),
-                headers=record.get("headers"),
-                response_time=record.get("response_time"),
-                ssl=record.get("ssl"),
-                redirects=record.get("redirects"),
-                content_type=record.get("content_type"),
-                meta=record.get("meta"),
-            )
+    response_list = [
+        UrlResponse(
+            status=r.get("status"),
+            headers=r.get("headers"),
+            response_time=r.get("response_time"),
+            ssl=r.get("ssl"),
+            redirects=r.get("redirects"),
+            content_type=r.get("content_type"),
+            meta=r.get("meta"),
         )
+        for r in records
+    ]
     
     response = UrlHistoryResponse(
         link=url,

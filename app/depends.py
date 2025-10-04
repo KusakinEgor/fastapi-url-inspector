@@ -1,4 +1,4 @@
-from app.repositories.database import db
+from app.repositories.database import mongo_db
 from app.services.url_checks import URLInspector
 
 inspector: URLInspector | None = None
@@ -9,4 +9,4 @@ async def get_inspector() -> URLInspector:
     return inspector
 
 async def get_links_collection():
-    return db["links"]
+    return mongo_db["links"]

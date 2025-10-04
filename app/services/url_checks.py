@@ -6,7 +6,7 @@ import time
 from urllib.parse import urlparse
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
-from typing import Optional, Dict, Any, Tuple, Union
+from typing import Optional, Dict, Any, Union
 from pydantic import HttpUrl
 
 class URLInspector:
@@ -27,19 +27,20 @@ class URLInspector:
     async def close(self):
         await self.client.aclose()
     
-    async def _ensure_scheme(self, url: Union[str, HttpUrl]) -> str:
-        url = str(url)
-        parsed = urlparse(url)
+    def _ensure_scheme(self, url: Union[str, HttpUrl]) -> str:
+        parsed = urlparse(str(url))
 
-        if not parsed.scheme:
-            return "https://" + parsed.netloc + parsed.path
-        elif parsed.scheme != "https":
-            return "https://" + parsed.netloc + parsed.path
+        if parsed.scheme != "https":
+            return f"https://{parsed.netloc}{parsed.path}"
         
         return url
     
-    async def check_status(self, url: Union[str, HttpUrl], timeout: Optional[float] = None) -> Optional[Tuple[int, Dict[str, str]]]:
-        url = await self._ensure_scheme(url)
+    async def check_status(
+            self, 
+            url: Union[str, HttpUrl],
+            timeout: Optional[float] = None
+    ) -> Optional[tuple[int, Dict[str, str]]]:
+        url = str(self._ensure_scheme(url))
 
         try:
             response = await self.client.head(url)
@@ -51,11 +52,12 @@ class URLInspector:
                     return status_code, headers
             
             return response.status_code, dict(response.headers)
-        except httpx.RequestError:
+        except httpx.RequestError as e:
+            print(f"Request failed for {url}: {e}")
             return None
     
     async def measure_response_time(self, url: Union[str, HttpUrl]) -> Optional[float]:
-        url = await self._ensure_scheme(url)
+        url = str(self._ensure_scheme(url))
         start = time.perf_counter()
 
         try:

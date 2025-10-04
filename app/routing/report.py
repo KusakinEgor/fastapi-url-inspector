@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
-from datetime import datetime, time, timezone
+from datetime import datetime, timezone
 from app.depends import get_links_collection
-from app.schemas.report import ReportItem, ReportRequest, ReportResponse
+from app.schemas.report import ReportRequest, ReportResponse
 from app.services.report_service import build_date_filter, aggregate_records, build_report_data
 
 router = APIRouter(tags=["📊 Report"])
@@ -12,7 +12,10 @@ router = APIRouter(tags=["📊 Report"])
     summary="📊 Generate aggregated report of URL checks",
     description="Returns aggregated statistics for all URLs or filtered by URL/date range"
 )
-async def get_report(body: ReportRequest, links_collection = Depends(get_links_collection)):
+async def get_report(
+    body: ReportRequest,
+    links_collection = Depends(get_links_collection)
+) -> ReportResponse:
     query_filter = {}
     if body.url:
         query_filter["URL"] = str(body.url)
