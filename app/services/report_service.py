@@ -1,18 +1,18 @@
 from datetime import datetime, time, timezone
 from app.schemas.report import ReportItem
 
-def build_date_filter(from_date, to_date):
-    date_filter = {}
+def build_date_filter(from_date: datetime, to_date: datetime) -> dict[str, datetime]:
+    query_filter = {}
 
     if from_date:
-        date_filter["$gte"] = datetime.combine(
+        query_filter["$gte"] = datetime.combine(
             from_date.date(),time.min,tzinfo=timezone.utc
         )
     if to_date:
-        date_filter["$lte"] = datetime.combine(
+        query_filter["$lte"] = datetime.combine(
             to_date.date(), time.max, tzinfo=timezone.utc
         )
-    return date_filter or None
+    return query_filter
 
 def aggregate_records(records):
     aggregated = {}
@@ -47,7 +47,12 @@ def aggregate_records(records):
 def build_report_data(aggregated):
     report_data = []
     for url, agg in aggregated.items():
-        average_response_time = agg["response_time_sum"] / agg["total_checks"] if agg["total_checks"] else 0
+        
+        if agg["total_checks"] == 0:
+            average_response_time = 0.0
+        else:
+            average_response_time = agg["response_time_sum"] / agg["total_checks"]
+
         report_data.append(
             ReportItem(
                 url=url,
